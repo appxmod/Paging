@@ -22,6 +22,7 @@ import com.knziha.paging.AppIconCover.AppIconCover;
 import com.knziha.paging.AppIconCover.AppLoadableBean;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -56,6 +57,10 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	private String dataFields;
 	private String table;
 	private boolean DESC = true;
+	
+	private String whereClause = StringUtils.EMPTY;
+	private String[] whereArgs = ArrayUtils.EMPTY_STRING_ARRAY;
+	
 	private String sql, sql_reverse, sql_fst;
 	
 	public PagingCursorAdapter(SQLiteDatabase db, ConstructorInterface<T> mRowConstructor
@@ -139,17 +144,31 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		return this;
 	}
 	
+	public PagingCursorAdapter<T> where(String whereClause, String[] whereArgs) {
+		if (whereArgs==null) {
+			whereArgs = ArrayUtils.EMPTY_STRING_ARRAY;
+		}
+		this.whereArgs = whereArgs;
+		if (whereClause!=null) {
+			this.whereClause = " and "+whereClause;
+		} else {
+			this.whereClause = "";
+		}
+		glide_initialized = false;
+		return this;
+	}
+	
 	private void remakeSql() {
 		sql = "SELECT ROWID," + sortField + "," + dataFields
-				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?")
+				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?") + whereClause
 				+ " ORDER BY " + sortField + " " + (DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
 		
 		sql_reverse = "SELECT ROWID," + sortField + "," + dataFields
-				+ " FROM " + table + " WHERE " + sortField + (!DESC?"<=?":">=?")
+				+ " FROM " + table + " WHERE " + sortField + (!DESC?"<=?":">=?") + whereClause
 				+ " ORDER BY " + sortField + " " + (!DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
 		
 		sql_fst = "SELECT ROWID," + sortField
-				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?")
+				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?") + whereClause
 				+ " ORDER BY " + sortField + " " + (DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
 	}
 	
@@ -332,7 +351,13 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	long basePosOffset;
 	
 	public void ReLoadPage(SimpleCursorPage<T> page) {
-		try (Cursor cursor = db.rawQuery(sql, new String[]{page.st_fd+""})){
+		String[] _whereArgs = this.whereArgs;
+		String[] whereArgs = new String[1+_whereArgs.length];
+		whereArgs[0] = page.st_fd+"";
+		if (whereArgs.length>1) {
+			System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+		}
+		try (Cursor cursor = db.rawQuery(sql, whereArgs)){
 			int len = cursor.getCount();
 			if (len>0) {
 				ArrayList<T> rows = new ArrayList<>(pageSz);
@@ -363,7 +388,13 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		//CMN.Log("GrowPage::", dir, lastPage);
 		boolean popData = true;
 		SimpleCursorPage<T> ret=null;
-		try (Cursor cursor = db.rawQuery(dir?sql:sql_reverse, new String[]{(dir?lastPage.ed_fd:lastPage.st_fd)+""});){
+		String[] _whereArgs = this.whereArgs;
+		String[] whereArgs = new String[1+_whereArgs.length];
+		whereArgs[0] = (dir?lastPage.ed_fd:lastPage.st_fd)+"";
+		if (whereArgs.length>1) {
+			System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+		}
+		try (Cursor cursor = db.rawQuery(dir?sql:sql_reverse, whereArgs)){
 			int len = cursor.getCount();
 			if (len>0) {
 				ArrayList<T> rows = new ArrayList<>(pageSz);
@@ -458,7 +489,13 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				long st_pos = number_of_rows_detected;
 				boolean popData = st_pos + pageSz > position;
 				popData = true;
-				try (Cursor cursor = db.rawQuery(popData?sql:sql_fst, new String[]{lastPage.ed_fd+""});){
+				String[] _whereArgs = this.whereArgs;
+				String[] whereArgs = new String[1+_whereArgs.length];
+				whereArgs[0] = lastPage.ed_fd+"";
+				if (whereArgs.length>1) {
+					System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+				}
+				try (Cursor cursor = db.rawQuery(popData?sql:sql_fst, whereArgs)){
 					int len = cursor.getCount();
 					if (len>0) {
 						ArrayList<T> rows = new ArrayList<>(pageSz);
