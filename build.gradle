@@ -1,0 +1,69 @@
+apply plugin: 'com.android.library'
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion "30.0.0"
+
+    defaultConfig {
+        minSdkVersion 19
+        targetSdkVersion 30
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    if (use_mat_official == '1') {
+        api(libs_mat) {
+            exclude module: "appcompat"
+            exclude module: "appcompat-resources"
+        }
+    } else {
+        implementation(project(':AweDesigner'))
+    }
+    if (use_prefer_official == '1') {
+        api(libs_prefer) {
+            exclude module: "appcompat"
+            exclude module: "appcompat-resources"
+        }
+    } else {
+        api(project(':AppPreference'))
+    }
+
+    if (use_recycler_official == '1') {
+        api(libs_recycler)
+    } else {
+        api project(':AwtRecyclerView')
+    }
+
+    api(libs_clang)
+    api project(':Logger')
+
+    if(false) {
+        api libs_glide
+        annotationProcessor libs_glide
+    } else {
+        //compileOnly "com.google.auto.service:auto-service:1.0-rc6"
+        //compileOnly "com.squareup:javapoet:1.10.0"
+        compileOnly project(path: ':GlideModule:annotation:compiler')
+        annotationProcessor project(path: ':GlideModule:annotation:compiler')
+        api project(path: ':GlideModule:glide')
+        //implementation 'com.knziha.glidemodule:GlideModule:1.0@aar'
+    }
+
+    annotationProcessor "com.google.auto.service:auto-service:1.0-rc6"
+}
