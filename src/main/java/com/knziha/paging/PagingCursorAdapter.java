@@ -3,7 +3,10 @@ package com.knziha.paging;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.ShapeDrawable;
 import android.util.Pair;
 import android.widget.ImageView;
 
@@ -75,6 +78,20 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		return number_of_rows_detected;
 	}
 	
+	public int getRealCount() {
+		int number_of_rows_detected=0;
+		for (SimpleCursorPage page:pages) {
+			number_of_rows_detected += page.number_of_row;
+		}
+		if(number_of_rows_detected!=this.number_of_rows_detected) {
+			CMN.Log("Error!!!");
+			for (SimpleCursorPage page:pages) {
+				CMN.Log(page);
+			}
+		}
+		return number_of_rows_detected;
+	}
+	
 	int pageDataSz = 100;
 	
 	@Override
@@ -82,15 +99,17 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		int idx = getPageAt(position);
 		SimpleCursorPage<T> page = pages.get(idx);
 		int offsetedPos = (int) (position-basePosOffset);
-		//CMN.Log("getReaderAt basePosOffset="+basePosOffset
-		//		, position, "@"+idx, basePosOffset+page.pos, basePosOffset+page.end);
+//		CMN.Log("getReaderAt basePosOffset="+basePosOffset
+//				, (position+1)+"/"+getCount()/*+"=="+getRealCount()*/, "@"+(idx+1)+"/"+pages.size(), basePosOffset+page.pos, basePosOffset+page.end);
 		//CMN.Log("--- "+page);
 		//CMN.Log("--- "+offsetedPos, page.rows[(int) (offsetedPos-page.pos)]);
-		boolean b1=idx==pages.size()-1 && offsetedPos >=page.end-page.number_of_row/2;
-		if (b1
-				|| idx==0 && offsetedPos<=page.pos+page.number_of_row/2
-		) {
-			PrepareNxtPage(page, b1);
+		if(glide==null || glide_initialized) {
+			boolean b1=idx==pages.size()-1 && offsetedPos >=page.end-page.number_of_row/2;
+			if (b1
+					|| idx==0 && offsetedPos<=page.pos+page.number_of_row/2
+			) {
+				PrepareNxtPage(page, b1);
+			}
 		}
 		T ret;
 		if (page.rows==null) {
@@ -121,6 +140,11 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			dataQueue_size.addAndGet(-removed);
 		}
 		return ret;
+	}
+	
+	@Override
+	public void close() {
+	
 	}
 	
 	public PagingCursorAdapter<T> bindTo(RecyclerView recyclerView) {
@@ -181,7 +205,9 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			glide_initialized = false;
 			glide.load(new AppIconCover(() -> {
 				//try { Thread.sleep(200); } catch (InterruptedException ignored) { }
+				//CMN.Log("startPaging::loading::");
 				startPagingInternal(resume_to_sort_number, init_load_size);
+				//recyclerView.getAdapter().postDataSetChanged(recyclerView, 120);
 				return FuckGlideDrawable;
 			}))
 			.override(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL)
@@ -195,7 +221,9 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				}
 				@Override
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+					//CMN.Log("startPaging::onResourceReady::");
 					recyclerView.getAdapter().notifyDataSetChanged();
+					init_glide();
 					return true;
 				}
 			})
@@ -302,6 +330,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				}
 				@Override
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+					//CMN.Log("startPaging::onResourceReady::!!!");
 					Pair<Integer, SimpleCursorPage<T>> rng;
 					SimpleCursorPage<T> pg;
 					RecyclerView.Adapter ada = recyclerView.getAdapter();
@@ -314,6 +343,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 						} else {
 							pages.add(pg);
 						}
+						//CMN.Log("loaded::", rng.first, pg.number_of_row, pg);
 						ada.notifyItemRangeInserted(rng.first, pg.number_of_row);
 					}
 					SimpleCursorPage<T> page;
@@ -472,6 +502,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	
 	public void PreparePageAt(int position, long resume) {
 		if (!finished && position>=number_of_rows_detected) {
+			//CMN.Log("PreparePageAt::", position, number_of_rows_detected);
 			SimpleCursorPage<T> lastPage;
 			if (pages.size()>0) {
 				lastPage = pages.get(pages.size()-1);
@@ -553,6 +584,10 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 					throw new RuntimeException(e);
 				}
 			}
+			//CMN.Log("PreparePageAt::done::", position, number_of_rows_detected);
+			//for (SimpleCursorPage page:pages) {
+			//	CMN.Log(page);
+			//}
 		}
 	}
 }

@@ -21,7 +21,7 @@ class SimpleCursorPage<T extends CursorReader>{
 				"st_fd=" + formatter.format(new Date(st_fd)) +
 				", ed_fd=" + formatter.format(new Date(ed_fd)) +
 				", number_of_row=" + number_of_row +
-				", rows=" + (rows!=null?rows[0]+ " ~ " + rows[number_of_row-1]:rows) +
+				", rows=" + (rows!=null&&number_of_row>0?rows[0]+ " ~ " + rows[number_of_row-1]:rows) +
 				'}';
 	}
 }
