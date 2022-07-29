@@ -45,7 +45,13 @@ public class AppIconCover {
 	public Drawable load() throws IOException {
 		AppLoadableBean loader = path.get();
 		CMN.Log("load:: "+loader);
-		if(loader==null) CMN.Log("Glide :: 加载异常，WeakReference 已被擦除！");
-		return loader==null?null:loader.load();
+		if(loader==null)
+			CMN.Log("Glide :: 加载异常，WeakReference 已被擦除！");
+		try {
+			return loader.load();
+		} catch (IOException e) {
+			CMN.Log(e);
+		}
+		return null;
 	}
 }
