@@ -110,10 +110,14 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		//CMN.Log("--- "+offsetedPos, page.rows[(int) (offsetedPos-page.pos)]);
 		if(glide==null || glide_initialized) {
 			boolean b1=idx==pages.size()-1 && offsetedPos >=page.end-page.number_of_row/2;
+			// b1 是向下扫
 			if (b1
-					|| idx==0 && offsetedPos<=page.pos+page.number_of_row/2
+					//|| idx==0 && offsetedPos<=page.pos+page.number_of_row/2
 			) {
 				PrepareNxtPage(page, b1);
+			}
+			if (idx==0 && offsetedPos<=page.pos+page.number_of_row/2) {
+				PrepareNxtPage(page, false);
 			}
 		}
 		T ret;
