@@ -1,5 +1,7 @@
 package com.knziha.paging;
 
+import static androidx.recyclerview.widget.LinearLayoutManager.INVALID_OFFSET;
+
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
@@ -10,7 +12,9 @@ import android.graphics.drawable.ShapeDrawable;
 import android.util.Pair;
 import android.widget.ImageView;
 
+import androidx.annotation.AnyThread;
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -38,6 +42,7 @@ import static com.knziha.logger.CMN.FuckGlideDrawable;
 
 public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapterInterface<T> {
 	private RecyclerView recyclerView;
+	public static boolean simulateSlowIO;
 	
 	ArrayList<SimpleCursorPage<T>> pages =  new ArrayList<>(1024);
 	Queue<Pair<Integer, SimpleCursorPage<T>>> insertQueue = new ConcurrentLinkedQueue<>();
@@ -196,8 +201,11 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				+ " ORDER BY " + sortField + " " + (DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
 	}
 	
+	public interface OnLoadListener {
+		void onLoaded(PagingCursorAdapter adapter);
+	}
 	
-	public void startPaging(long resume_to_sort_number, int init_load_size, int page_size) {
+	public void startPaging(long resume_to_sort_number, long offset, int init_load_size, int page_size, OnLoadListener onload) {
 		pages.clear();
 		number_of_rows_detected = 0;
 		pageSz = page_size;
@@ -222,8 +230,24 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				@Override
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
 					//CMN.Log("startPaging::onResourceReady::");
+					int voff= (int) offset;
+					if (voff!=INVALID_OFFSET && pages.size()!=0) {
+						try {
+							if (pages.get(0).st_fd!=resume_to_sort_number) {
+								voff = 0;
+							}
+							if (recyclerView.getLayoutManager() instanceof LinearLayoutManager) {
+								((LinearLayoutManager)recyclerView.getLayoutManager()).scrollToPositionWithOffset(0, voff);
+							} else {
+								recyclerView.scrollToPosition(0);
+							}
+						} catch (Exception ignored) { }
+					}
 					recyclerView.getAdapter().notifyDataSetChanged();
 					init_glide();
+					if (onload!=null) {
+						onload.onLoaded(PagingCursorAdapter.this);
+					}
 					return true;
 				}
 			})
@@ -241,11 +265,12 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	}
 	
 	Runnable mGrowRunnable = new Runnable() {
+		@AnyThread
 		@Override
 		public void run() {
-			int st = number_of_rows_detected;
-			boolean dir = mGrowingPageDir;
-			SimpleCursorPage<T> pg = GrowPage(dir);
+			final int st = number_of_rows_detected;
+			final boolean dir = mGrowingPageDir;
+			final SimpleCursorPage<T> pg = GrowPage(dir);
 			if (pg!=null) {
 				number_of_rows_detected += pg.number_of_row;
 				if (!dir) {
@@ -255,9 +280,21 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 					pages.add(pg);
 				}
 				//if (!dir) CMN.Log("reverse GrowPage::", number_of_rows_detected - st);
-				if (number_of_rows_detected!=st) {
-					recyclerView.getAdapter().notifyItemRangeInserted(dir?st+1:0, number_of_rows_detected - st);
-				}
+				//if (number_of_rows_detected!=st) {
+				//	recyclerView.getAdapter().notifyItemRangeInserted(dir?st+1:0, number_of_rows_detected - st);
+				//}
+			}
+		}
+	};
+	
+	Runnable mGrowRunnable1 = new Runnable() {
+		@Override
+		public void run() {
+			final int st = number_of_rows_detected;
+			final boolean dir = mGrowingPageDir;
+			mGrowRunnable.run();
+			if (number_of_rows_detected!=st) {
+				recyclerView.getAdapter().notifyItemRangeInserted(dir?st+1:0, number_of_rows_detected - st);
 			}
 		}
 	};
@@ -313,8 +350,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			} else {
 				mGrowingPage = page;
 				mGrowingPageDir = dir;
-				recyclerView.removeCallbacks(mGrowRunnable);
-				recyclerView.post(mGrowRunnable);
+				recyclerView.removeCallbacks(mGrowRunnable1);
+				recyclerView.post(mGrowRunnable1);
 			}
 		}
 	}
@@ -488,6 +525,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 						ArrayUtils.reverse(page.rows);
 					}
 				}
+				simulateSlowIO();
 				dataQueue.add(page);
 				dataQueue_size.incrementAndGet();
 				ret = page;
@@ -498,6 +536,16 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			throw new RuntimeException(e);
 		}
 		return ret;
+	}
+	
+	private void simulateSlowIO() {
+		if (simulateSlowIO) {
+			CMN.Log("GrowPage::simulateSlowIO !!!");
+			try {
+				Thread.sleep(2000);
+			} catch (InterruptedException ignored) { }
+			CMN.Log("GrowPage::simulateSlowIO ...");
+		}
 	}
 	
 	public void PreparePageAt(int position, long resume) {
@@ -570,6 +618,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 						if (popData) {
 							page.rows = rows.toArray(mRowArrConstructor.newInstance(rows.size()));
 						}
+						simulateSlowIO();
 						number_of_rows_detected += page.number_of_row;
 						pages.add(lastPage = page);
 						finished |= len<pageSz;
