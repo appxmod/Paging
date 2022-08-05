@@ -41,18 +41,6 @@ dependencies {
 
     api(libs_clang)
     api project(':Logger')
-
-    if(false) {
-        api libs_glide
-        annotationProcessor libs_glide
-    } else {
-        //compileOnly "com.google.auto.service:auto-service:1.0-rc6"
-        //compileOnly "com.squareup:javapoet:1.10.0"
-        compileOnly project(path: ':GlideModule:annotation:compiler')
-        annotationProcessor project(path: ':GlideModule:annotation:compiler')
-        api project(path: ':GlideModule:glide')
-        //implementation 'com.knziha.glidemodule:GlideModule:1.0@aar'
-    }
-
-    annotationProcessor "com.google.auto.service:auto-service:1.0-rc6"
 }
+
+apply from: "${rootProject.projectDir}/dependency.gradle"
