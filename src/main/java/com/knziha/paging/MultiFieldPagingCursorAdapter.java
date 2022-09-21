@@ -29,20 +29,21 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 
-public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements PagingAdapterInterface<T> {
+public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> implements PagingAdapterInterface<T> {
 	private RecyclerView recyclerView;
 	public static boolean simulateSlowIO;
 	
-	ArrayList<SimpleCursorPage<T>> pages =  new ArrayList<>(1024);
-	Queue<Pair<Integer, SimpleCursorPage<T>>> insertQueue = new ConcurrentLinkedQueue<>();
-	Queue<SimpleCursorPage<T>> dataQueue = new ConcurrentLinkedQueue<>();
-	Queue<SimpleCursorPage<T>> updateQueue = new ConcurrentLinkedQueue<>();
+	ArrayList<MultiFieldSortCursorPage<T>> pages =  new ArrayList<>(1024);
+	Queue<Pair<Integer, MultiFieldSortCursorPage<T>>> insertQueue = new ConcurrentLinkedQueue<>();
+	Queue<MultiFieldSortCursorPage<T>> dataQueue = new ConcurrentLinkedQueue<>();
+	Queue<MultiFieldSortCursorPage<T>> updateQueue = new ConcurrentLinkedQueue<>();
 	AtomicInteger dataQueue_size = new AtomicInteger();
 	
 	int number_of_rows_detected;
@@ -56,7 +57,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	
 	private int pageSz = 20;
 	
-	private String sortField;
+	private String[] sortFields;
 	private String dataFields;
 	private String table;
 	private boolean DESC = true;
@@ -84,12 +85,12 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	
 	public int getRealCount() {
 		int number_of_rows_detected=0;
-		for (SimpleCursorPage page:pages) {
+		for (MultiFieldSortCursorPage page:pages) {
 			number_of_rows_detected += page.number_of_row;
 		}
 		if(number_of_rows_detected!=this.number_of_rows_detected) {
 			CMN.Log("Error!!!");
-			for (SimpleCursorPage page:pages) {
+			for (MultiFieldSortCursorPage page:pages) {
 				CMN.Log(page);
 			}
 		}
@@ -101,7 +102,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	@Override
 	public T getReaderAt(int position) {
 		int idx = getPageAt(position);
-		SimpleCursorPage<T> page = pages.get(idx);
+		MultiFieldSortCursorPage<T> page = pages.get(idx);
 		int offsetedPos = (int) (position-basePosOffset);
 		//CMN.Log("getReaderAt basePosOffset="+basePosOffset
 		//		, (position+1)+"/"+getCount()/*+"=="+getRealCount()*/, "@"+(idx+1)+"/"+pages.size(), basePosOffset+page.pos, basePosOffset+page.end);
@@ -142,7 +143,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 			CMN.Log(e);
 		}
 		if(dataQueue_size.get()>pageDataSz) {
-			SimpleCursorPage<T> toRemove;
+			MultiFieldSortCursorPage<T> toRemove;
 			int toRemoveCnt = dataQueue.size()-pageDataSz;
 			int removed = 0;
 			while((toRemove=dataQueue.poll())!=null && toRemoveCnt>0) {
@@ -175,9 +176,9 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 		return this;
 	}
 	
-	public MultiFieldPagingCursorAdapter<T> sortBy(String table, String sortField, boolean desc, String dataFields) {
+	public MultiFieldPagingCursorAdapter<T> sortBy(String table, String[] sortFields, boolean desc, String dataFields) {
 		this.table = table;
-		this.sortField = sortField;
+		this.sortFields = sortFields;
 		this.dataFields = dataFields;
 		this.DESC = desc;
 		glide_initialized = false;
@@ -199,24 +200,62 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	}
 	
 	private void remakeSql() {
-		sql = "SELECT ROWID," + sortField + "," + dataFields
-				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?") + whereClause
-				+ " ORDER BY " + sortField + " " + (DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
+		String fields = "";
+		final int _1 = sortFields.length;
+		for (int i = 0; i < _1; i++) {
+			if (i > 0) {
+				fields += ",";
+			}
+			fields += sortFields[i];
+		}
+		String order = DESC?"<=?":">=?";
+		String sch = "";
+		for (int i = 0; i < _1; i++) {
+			if (i > 0) {
+				sch += " and ";
+			}
+			sch += sortFields[i]+order;
+		}
+		order = DESC?"DESC":"ASC";
+		String orders = "";
+		for (int i = 0; i < _1; i++) {
+			if (i > 0) {
+				orders += ",";
+			}
+			orders += sortFields[i]+" "+order;
+		}
 		
-		sql_reverse = "SELECT ROWID," + sortField + "," + dataFields
-				+ " FROM " + table + " WHERE " + sortField + (!DESC?"<=?":">=?") + whereClause
-				+ " ORDER BY " + sortField + " " + (!DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
+		sql = "SELECT ROWID," + fields + "," + dataFields
+				+ " FROM " + table + " WHERE " + sch + whereClause
+				+ " ORDER BY " + orders  + " LIMIT " + pageSz;
 		
-		sql_fst = "SELECT ROWID," + sortField
-				+ " FROM " + table + " WHERE " + sortField + (DESC?"<=?":">=?") + whereClause
-				+ " ORDER BY " + sortField + " " + (DESC?"DESC":"ASC")  + " LIMIT " + pageSz;
+		sql_fst = "SELECT ROWID," + fields
+				+ " FROM " + table + " WHERE " + sch + whereClause
+				+ " ORDER BY " + orders  + " LIMIT " + pageSz;
+		
+		order = !DESC?"<=?":">=?";
+		sch = "";
+		for (int i = 0; i < _1; i++) {
+			if (i > 0) {
+				sch += " and ";
+			}
+			sch += sortFields[i]+order;
+		}
+		order = !DESC?"DESC":"ASC";
+		orders = "";
+		for (int i = 0; i < _1; i++) {
+			if (i > 0) {
+				orders += ",";
+			}
+			orders += sortFields[i]+" "+order;
+		}
+		
+		sql_reverse = "SELECT ROWID," + fields + "," + dataFields
+				+ " FROM " + table + " WHERE " + sch + whereClause
+				+ " ORDER BY " + orders  + " LIMIT " + pageSz;
 	}
 	
-	public interface OnLoadListener {
-		void onLoaded(PagingAdapterInterface adapter);
-	}
-	
-	public void startPaging(long resume_to_sort_number, long offset, int init_load_size, int page_size, OnLoadListener onload) {
+	public void startPaging(long[] resume_to_sort_numbers, long offset, int init_load_size, int page_size, PagingCursorAdapter.OnLoadListener onload) {
 		pages.clear();
 		number_of_rows_detected = 0;
 		pageSz = page_size;
@@ -225,7 +264,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 			glide.load(new AppIconCover(() -> {
 				//try { Thread.sleep(200); } catch (InterruptedException ignored) { }
 				//CMN.Log("startPaging::loading::");
-				startPagingInternal(resume_to_sort_number, init_load_size);
+				startPagingInternal(resume_to_sort_numbers, init_load_size);
 				//recyclerView.getAdapter().postDataSetChanged(recyclerView, 120);
 				return FuckGlideDrawable;
 			}))
@@ -245,7 +284,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 					int voff= (int) offset;
 					if (voff!=INVALID_OFFSET && pages.size()!=0) {
 						try {
-							if (pages.get(0).st_fd!=resume_to_sort_number) {
+							if (Arrays.equals(pages.get(0).st_fds, resume_to_sort_numbers)) {
 								voff = 0;
 							}
 							if (recyclerView.getLayoutManager() instanceof LinearLayoutManager) {
@@ -265,11 +304,11 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 			})
 			.into(pageAsyncLoader);
 		} else {
-			startPagingInternal(resume_to_sort_number, init_load_size);
+			startPagingInternal(resume_to_sort_numbers, init_load_size);
 		}
 	}
 	
-	public void startPagingInternal(long resume_to_sort_number, int init_load_size) {
+	public void startPagingInternal(long[] resume_to_sort_number, int init_load_size) {
 		pages.clear();
 		remakeSql();
 		number_of_rows_detected = 0;
@@ -279,7 +318,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	public void mGrowRunnableRun(final boolean dir) {
 		if(closed) return;
 		final int st = number_of_rows_detected;
-		final SimpleCursorPage<T> pg = GrowPage(dir);
+		final MultiFieldSortCursorPage<T> pg = GrowPage(dir);
 		if (pg!=null) {
 			number_of_rows_detected += pg.number_of_row;
 			if (!dir) {
@@ -321,9 +360,9 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	
 	class PageAsyncLoaderBean implements AppLoadableBean {
 		final int st;
-		final SimpleCursorPage<T> page;
+		final MultiFieldSortCursorPage<T> page;
 		final boolean dir;
-		PageAsyncLoaderBean(int st, SimpleCursorPage<T> page, boolean dir) {
+		PageAsyncLoaderBean(int st, MultiFieldSortCursorPage<T> page, boolean dir) {
 			this.st = st;
 			this.page = page;
 			this.dir = dir;
@@ -336,7 +375,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 				ReLoadPage(page);
 				updateQueue.add(page);
 			} else {
-				SimpleCursorPage<T> inserted = GrowPage(dir);
+				MultiFieldSortCursorPage<T> inserted = GrowPage(dir);
 				//if (!dir) CMN.Log("PrepareNxtPage :: reverse GrowPage::", inserted);
 				if (inserted!=null) {
 					insertQueue.add(new Pair<>(dir?st+1:0, inserted));
@@ -357,7 +396,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 		}
 	}
 	
-	private void PrepareNxtPage(SimpleCursorPage<T> page, boolean dir) {
+	private void PrepareNxtPage(MultiFieldSortCursorPage<T> page, boolean dir) {
 		if(closed) return;
 		//CMN.Log("PrepareNxtPage::???", dir, mGrowingPage);
 		if (!glide_initialized || recyclerView!=null && (mGrowingPage!=page || (mGrowingPageDir|(dir?2:1))==0)) {
@@ -391,8 +430,8 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
 					//CMN.Log("startPaging::onResourceReady::!!!");
 					if(closed) return true;
-					Pair<Integer, SimpleCursorPage<T>> rng;
-					SimpleCursorPage<T> pg;
+					Pair<Integer, MultiFieldSortCursorPage<T>> rng;
+					MultiFieldSortCursorPage<T> pg;
 					RecyclerView.Adapter ada = recyclerView.getAdapter();
 					while((rng = insertQueue.poll())!=null) {
 						pg = rng.second; //todo 避免重复加载？
@@ -406,7 +445,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 						if(debugging) CMN.Log("loaded::", rng.first, pg.number_of_row, pg, "detected="+number_of_rows_detected);
 						ada.notifyItemRangeInserted(rng.first, pg.number_of_row);
 					}
-					SimpleCursorPage<T> page;
+					MultiFieldSortCursorPage<T> page;
 					while((page = updateQueue.poll())!=null) {
 						ada.notifyItemRangeChanged((int)(page.pos+basePosOffset), (int) (page.end+basePosOffset));
 					}
@@ -436,16 +475,19 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 	
 	boolean finished = false;
 	
-	SimpleCursorPage<T> mGrowingPage;
+	MultiFieldSortCursorPage<T> mGrowingPage;
 	int mGrowingPageDir;
 	long basePosOffset;
 	
-	public void ReLoadPage(SimpleCursorPage<T> page) {
+	public void ReLoadPage(MultiFieldSortCursorPage<T> page) {
 		String[] _whereArgs = this.whereArgs;
 		String[] whereArgs = new String[1+_whereArgs.length];
-		whereArgs[0] = page.st_fd+"";
-		if (whereArgs.length>1) {
-			System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+		int _1 = sortFields.length;
+		for (int i = 0; i < _1; i++) {
+			whereArgs[i] = page.st_fds[i]+"";
+		}
+		if (_whereArgs.length>0) {
+			System.arraycopy(_whereArgs, 0, whereArgs, _1, _whereArgs.length);
 		}
 		try (Cursor cursor = db.rawQuery(sql, whereArgs)){
 			int len = cursor.getCount();
@@ -454,12 +496,12 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 				//if (!dir && cursor.moveToLast()) cursor.moveToPrevious();
 				int cc=0;
 				long id = -1;
-				long sort_number = 0;
+				long[] sort_numbers = new long[sortFields.length];
 				while (cursor.moveToNext() && cc< page.number_of_row) {
 					id = cursor.getLong(0);
-					sort_number = cursor.getLong(1);
+					new_sorts(cursor, sort_numbers);
 					T row = mRowConstructor.newInstance(0);
-					row.ReadCursor(cursor, id, sort_number);
+					row.ReadCursor(cursor, id, sort_numbers);
 					rows.add(row);
 					cc++;
 				}
@@ -473,30 +515,33 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 		}
 	}
 	
-	public SimpleCursorPage<T> GrowPage(boolean dir) {
-		SimpleCursorPage<T> lastPage = dir?pages.get(pages.size()-1):pages.get(0);
+	public MultiFieldSortCursorPage<T> GrowPage(boolean dir) {
+		MultiFieldSortCursorPage<T> lastPage = dir?pages.get(pages.size()-1):pages.get(0);
 		//CMN.Log("GrowPage::", dir, lastPage);
 		boolean popData = true;
-		SimpleCursorPage<T> ret=null;
+		MultiFieldSortCursorPage<T> ret=null;
 		String[] _whereArgs = this.whereArgs;
-		String[] whereArgs = new String[1+_whereArgs.length];
-		whereArgs[0] = (dir?lastPage.ed_fd:lastPage.st_fd)+"";
-		if (whereArgs.length>1) {
-			System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+		final int _1 = sortFields.length;
+		String[] whereArgs = new String[_1+_whereArgs.length];
+		for (int i = 0; i < _1; i++) {
+			whereArgs[i] = (dir?lastPage.ed_fds:lastPage.st_fds)[i]+"";
+		}
+		if (_whereArgs.length>0) {
+			System.arraycopy(_whereArgs, 0, whereArgs, _1, _whereArgs.length);
 		}
 		try (Cursor cursor = db.rawQuery(dir?sql:sql_reverse, whereArgs)){
 			int len = cursor.getCount();
 			if (len>0) {
 				ArrayList<T> rows = new ArrayList<>(pageSz);
 				long lastEndId = dir?lastPage.ed_id:lastPage.st_id;
-				SimpleCursorPage<T> page = new SimpleCursorPage<>();
+				MultiFieldSortCursorPage<T> page = new MultiFieldSortCursorPage<>();
 				boolean lastRowFound = false;
 				long id = -1;
-				long sort_number = 0;
+				long[] sort_numbers = new long[_1];
 				//if (!dir && cursor.moveToLast()) cursor.moveToPrevious();
 				while (cursor.moveToNext()) {
 					id = cursor.getLong(0);
-					sort_number = cursor.getLong(1);
+					new_sorts(cursor, sort_numbers);
 					if (lastEndId!=-1) {
 						if (lastEndId==id) {
 							lastEndId=-1;
@@ -510,35 +555,38 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 					}
 					if (page.number_of_row==0) {
 						if (dir) {
-							page.st_fd = sort_number;
+							page.st_fds = sort_numbers;
 							page.st_id = id;
 						} else {
-							page.ed_fd = sort_number;
+							page.ed_fds = sort_numbers;
 							page.ed_id = id;
 						}
 					}
 					if (popData) {
 						T row = mRowConstructor.newInstance(0);
-						row.ReadCursor(cursor, id, sort_number);
+						row.ReadCursor(cursor, id, sort_numbers);
 						rows.add(row);
 					}
 					page.number_of_row++;
 				}
 				if ((!lastRowFound || id==lastEndId) && lastEndId!=-1) {
 					if (len==1) return null;
+					for (int i = 0; i < rows.size(); i++) {
+						CMN.Log(rows.get(i));
+					}
 					throw new IllegalStateException("pageSz too small!"+lastRowFound+" "+rows.size()+" "+dir);
 				}
 				if (popData) {
 					page.rows = rows.toArray(mRowArrConstructor.newInstance(rows.size()));
 				}
 				if (dir) {
-					page.ed_fd = sort_number;
+					page.ed_fds = sort_numbers;
 					page.ed_id = id;
 					page.pos = lastPage.end + 1;
 					page.end = lastPage.end + page.number_of_row;
 					//pages.add(page);
 				} else {
-					page.st_fd = sort_number;
+					page.st_fds = sort_numbers;
 					page.st_id = id;
 					page.pos = lastPage.pos - page.number_of_row;
 					page.end = lastPage.pos - 1;
@@ -571,19 +619,19 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 		}
 	}
 	
-	public void PreparePageAt(int position, long resume) {
+	public void PreparePageAt(int position, long[] resume) {
 		if (!finished && position>=number_of_rows_detected) {
 			if(debugging) CMN.Log("PreparePageAt::", position, number_of_rows_detected);
-			SimpleCursorPage<T> lastPage;
+			MultiFieldSortCursorPage<T> lastPage;
 			if (pages.size()>0) {
 				lastPage = pages.get(pages.size()-1);
 			} else {
-				lastPage = new SimpleCursorPage<>();
+				lastPage = new MultiFieldSortCursorPage<>();
 				if (!DESC) {
-					lastPage.ed_fd = Long.MIN_VALUE;
+					lastPage.ed_fds = new_sorts(Long.MIN_VALUE);
 				}
-				if (resume!=0) {
-					lastPage.ed_fd = resume;
+				if (resume!=null) {
+					lastPage.ed_fds = resume;
 				}
 			}
 			while(true) {
@@ -591,24 +639,27 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 				long st_pos = number_of_rows_detected;
 				boolean popData = st_pos + pageSz > position;
 				popData = true;
+				final int _1 = sortFields.length;
 				String[] _whereArgs = this.whereArgs;
-				String[] whereArgs = new String[1+_whereArgs.length];
-				whereArgs[0] = lastPage.ed_fd+"";
-				if (whereArgs.length>1) {
-					System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
+				String[] whereArgs = new String[_1+_whereArgs.length];
+				for (int i = 0; i < _1; i++) {
+					whereArgs[i] = lastPage.ed_fds[i]+"";
+				}
+				if (_whereArgs.length>0) {
+					System.arraycopy(_whereArgs, 0, whereArgs, _1, _whereArgs.length);
 				}
 				try (Cursor cursor = db.rawQuery(popData?sql:sql_fst, whereArgs)){
 					int len = cursor.getCount();
 					if (len>0) {
 						ArrayList<T> rows = new ArrayList<>(pageSz);
 						long lastEndId = lastPage.ed_id;
-						SimpleCursorPage<T> page = new SimpleCursorPage<>();
+						MultiFieldSortCursorPage<T> page = new MultiFieldSortCursorPage<>();
 						boolean lastRowFound = false;
 						long id = -1;
-						long sort_number = 0;
+						long[] sort_numbers = new long[_1];
 						while (cursor.moveToNext()) {
 							id = cursor.getLong(0);
-							sort_number = cursor.getLong(1);
+							new_sorts(cursor, sort_numbers);
 							if (lastEndId!=-1) {
 								if (lastEndId==id) {
 									lastEndId=-1;
@@ -621,12 +672,12 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 								}
 							}
 							if (page.number_of_row==0) {
-								page.st_fd = sort_number;
+								page.st_fds = sort_numbers;
 								page.st_id = id;
 							}
 							if (popData) {
 								T row = mRowConstructor.newInstance(0);
-								row.ReadCursor(cursor, id, sort_number);
+								row.ReadCursor(cursor, id, sort_numbers);
 								rows.add(row);
 							}
 							page.number_of_row++;
@@ -635,7 +686,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 							//todo dont throw!!!
 							throw new IllegalStateException("pageSz too small!");
 						}
-						page.ed_fd = sort_number;
+						page.ed_fds = sort_numbers;
 						page.ed_id = id;
 						page.pos = st_pos;
 						page.end = st_pos + page.number_of_row - 1;
@@ -659,11 +710,22 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReader> implements Pa
 			}
 			if (debugging) {
 				CMN.Log("PreparePageAt::done::", position, number_of_rows_detected);
-				for (SimpleCursorPage page:pages) {
+				for (MultiFieldSortCursorPage page:pages) {
 					CMN.Log(page);
 				}
 			}
 		}
 	}
 	
+	public long[] new_sorts(long val) {
+		long[] ret = new long[sortFields.length];
+		Arrays.fill(ret, val);
+		return ret;
+	}
+	
+	public void new_sorts(Cursor cursor, long[] sort_numbers) {
+		for (int i = 0; i < sort_numbers.length; i++) {
+			sort_numbers[i] = cursor.getLong(i+1);
+		}
+	}
 }

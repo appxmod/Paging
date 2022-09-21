@@ -218,7 +218,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	}
 	
 	public interface OnLoadListener {
-		void onLoaded(PagingCursorAdapter adapter);
+		void onLoaded(PagingAdapterInterface adapter);
 	}
 	
 	public void startPaging(long resume_to_sort_number, long offset, int init_load_size, int page_size, OnLoadListener onload) {
