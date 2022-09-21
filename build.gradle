@@ -39,7 +39,7 @@ dependencies {
     //api libs_recycler
     api project(':AwtRecyclerView')
 
-    api(libs_clang)
+    api(libs_ctext)
     api project(':Logger')
 }
 

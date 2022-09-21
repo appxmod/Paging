@@ -73,6 +73,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	
 	final static boolean debugging = false;
 	
+	boolean closed;
+	
 	public PagingCursorAdapter(SQLiteDatabase db, ConstructorInterface<T> mRowConstructor
 			, ConstructorInterface<T[]> mRowArrConstructor) {
 		this.mRowConstructor = mRowConstructor;
@@ -162,7 +164,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	
 	@Override
 	public void close() {
-	
+		closed = true;
+		recyclerView = null;
 	}
 	
 	public PagingCursorAdapter<T> bindTo(RecyclerView recyclerView) {
@@ -243,6 +246,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				@Override
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
 					//CMN.Log("startPaging::onResourceReady::");
+					if(closed) return true;
 					int voff= (int) offset;
 					if (voff!=INVALID_OFFSET && pages.size()!=0) {
 						try {
@@ -278,6 +282,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	}
 	
 	public void mGrowRunnableRun(final boolean dir) {
+		if(closed) return;
 		final int st = number_of_rows_detected;
 		final SimpleCursorPage<T> pg = GrowPage(dir);
 		if (pg!=null) {
@@ -298,6 +303,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	Runnable mGrowRunnableDown = new Runnable() {
 		@Override
 		public void run() {
+			if(closed) return;
 			final int st = number_of_rows_detected;
 			mGrowRunnableRun(true);
 			if (number_of_rows_detected!=st) {
@@ -309,6 +315,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	Runnable mGrowRunnableUp = new Runnable() {
 		@Override
 		public void run() {
+			if(closed) return;
 			final int st = number_of_rows_detected;
 			mGrowRunnableRun(false);
 			if (number_of_rows_detected!=st) {
@@ -328,6 +335,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		}
 		@Override
 		public Drawable load() {
+			if(closed) return null;
 			CMN.Log("PrepareNxtPage :: load!!!");
 			if (page!=null) {
 				ReLoadPage(page);
@@ -355,6 +363,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	}
 	
 	private void PrepareNxtPage(SimpleCursorPage<T> page, boolean dir) {
+		if(closed) return;
 		//CMN.Log("PrepareNxtPage::???", dir, mGrowingPage);
 		if (!glide_initialized || recyclerView!=null && (mGrowingPage!=page || (mGrowingPageDir|(dir?2:1))==0)) {
 			//CMN.Log("PrepareNxtPage::", dir, page);
@@ -386,6 +395,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				@Override
 				public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
 					//CMN.Log("startPaging::onResourceReady::!!!");
+					if(closed) return true;
 					Pair<Integer, SimpleCursorPage<T>> rng;
 					SimpleCursorPage<T> pg;
 					RecyclerView.Adapter ada = recyclerView.getAdapter();
