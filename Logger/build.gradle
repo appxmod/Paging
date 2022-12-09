@@ -33,3 +33,19 @@ android {
 dependencies {
 
 }
+
+
+apply plugin: 'maven-publish'
+afterEvaluate {
+    publishing {
+        publications {
+            mavenAll(MavenPublication) {
+                from components.release
+                groupId "org.appxmod.android"
+                artifactId "Logger"
+                version "1.0.0"
+            }
+        }
+    }
+}
+build.finalizedBy publishToMavenLocal

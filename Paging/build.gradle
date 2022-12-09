@@ -34,9 +34,26 @@ dependencies {
     api libs_mat
 
     api libs_recycler
+    api libs_ctext
 
-    api(libs_ctext)
+    //api(libs_ctext)
     api project(':Logger')
 }
 
 apply from: "${rootProject.projectDir}/dependency.gradle"
+
+
+apply plugin: 'maven-publish'
+afterEvaluate {
+    publishing {
+        publications {
+            mavenAll(MavenPublication) {
+                from components.release
+                groupId "org.appxmod.android"
+                artifactId "Paging"
+                version "1.0.0"
+            }
+        }
+    }
+}
+build.finalizedBy publishToMavenLocal

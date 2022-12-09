@@ -8,6 +8,6 @@
 //    }
 //}
 
-rootProject.name = "AwtRecyclerView"
-include ':RecyclerView'
-include ':recyclerViewFastScroller'
+rootProject.name = "Paging"
+include ':Paging'
+include ':Logger'
