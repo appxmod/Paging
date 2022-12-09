@@ -1,5 +1,9 @@
 package com.knziha.paging;
 
+import static com.knziha.logger.CMN.formatter;
+
+import com.knziha.logger.CMN;
+
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -14,7 +18,6 @@ class SimpleCursorPage<T extends CursorReader>{
 	long end = 0;
 	int number_of_row;
 	T[] rows;
-	private static DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd, HH-mm-ss", Locale.CHINA);
 	@Override
 	public String toString() {
 		return "SimplePage{" +

@@ -27,4 +27,14 @@ public class CursorAdapter<T extends CursorReader> implements PagingAdapterInter
 	public void close() {
 		cursor.close();
 	}
+	
+	@Override
+	public void recheckBoundary() {
+	
+	}
+	
+	@Override
+	public void recheckBoundaryAt(int i, boolean start) {
+	
+	}
 }

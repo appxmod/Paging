@@ -5,14 +5,10 @@ import static androidx.recyclerview.widget.LinearLayoutManager.INVALID_OFFSET;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.ShapeDrawable;
 import android.util.Pair;
 import android.widget.ImageView;
 
-import androidx.annotation.AnyThread;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -37,7 +33,7 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.knziha.logger.CMN.FuckGlideDrawable;
+import static com.knziha.logger.CMN.EmptyGlideDrawable;
 
 
 public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapterInterface<T> {
@@ -108,10 +104,12 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		int idx = getPageAt(position);
 		SimpleCursorPage<T> page = pages.get(idx);
 		int offsetedPos = (int) (position-basePosOffset);
-		//CMN.Log("getReaderAt basePosOffset="+basePosOffset
-		//		, (position+1)+"/"+getCount()/*+"=="+getRealCount()*/, "@"+(idx+1)+"/"+pages.size(), basePosOffset+page.pos, basePosOffset+page.end);
-		//CMN.Log("--- "+page);
-		//CMN.Log("--- "+offsetedPos, page.rows[(int) (offsetedPos-page.pos)]);
+//		if (debugging) {
+//			CMN.Log("getReaderAt basePosOffset="+basePosOffset
+//					, (position+1)+"/"+getCount()/*+"=="+getRealCount()*/, "@"+(idx+1)+"/"+pages.size(), basePosOffset+page.pos, basePosOffset+page.end);
+//			CMN.Log("--- "+page);
+//			CMN.Log("--- "+offsetedPos, page.rows[(int) (offsetedPos-page.pos)]);
+//		}
 		if(glide==null || glide_initialized) {
 			boolean b1=idx==pages.size()-1 && offsetedPos >=page.end-page.number_of_row/2;
 			boolean b2=idx==0 && offsetedPos<=page.pos+page.number_of_row/2;
@@ -123,8 +121,11 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 //				PrepareNxtPage(page, false);
 //			}
 			
-			if (mGrowingPage != page) mGrowingPageDir = 0;
-			if(b1) PrepareNxtPage(page, b1); if(b2) PrepareNxtPage(page, false);
+			if ((b1 || b2) && mGrowingPage != page) {
+				mGrowingPageDir = 0;
+			}
+			if(b1) PrepareNxtPage(page, b1);
+			if(b2) PrepareNxtPage(page, false);
 		}
 		T ret;
 		try {
@@ -134,7 +135,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				if (glide!=null) {
 					init_glide();
 					glide.load(new AppIconCover(new PageAsyncLoaderBean(number_of_rows_detected, page, false)))
-							.into(pageAsyncLoader);
+							.into(getPageAsyncLoader(true));
 				} else {
 					ReLoadPage(page);
 					ret = page.rows[(int) (offsetedPos-page.pos)];
@@ -195,7 +196,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		}
 		this.whereArgs = whereArgs;
 		if (whereClause!=null) {
-			this.whereClause = " and "+whereClause;
+			this.whereClause = " and ("+whereClause+")";
 		} else {
 			this.whereClause = "";
 		}
@@ -232,7 +233,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				//CMN.Log("startPaging::loading::");
 				startPagingInternal(resume_to_sort_number, init_load_size);
 				//recyclerView.getAdapter().postDataSetChanged(recyclerView, 120);
-				return FuckGlideDrawable;
+				return EmptyGlideDrawable;
 			}))
 			.override(Target.SIZE_ORIGINAL, Target.SIZE_ORIGINAL)
 			.skipMemoryCache(true)
@@ -268,7 +269,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 					return true;
 				}
 			})
-			.into(pageAsyncLoader);
+			.into(getPageAsyncLoader(true));
 		} else {
 			startPagingInternal(resume_to_sort_number, init_load_size);
 		}
@@ -336,7 +337,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		@Override
 		public Drawable load() {
 			if(closed) return null;
-			CMN.Log("PrepareNxtPage :: load!!!");
+			if(debugging) CMN.Log("PrepareNxtPage :: load!!! hasPage=", page!=null);
+			if(debugging) CMN.Log("PageAsyncLoaderBean :: this="+Integer.toHexString(CMN.id(this)));
 			if (page!=null) {
 				ReLoadPage(page);
 				updateQueue.add(page);
@@ -347,7 +349,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 					insertQueue.add(new Pair<>(dir?st+1:0, inserted));
 				}
 			}
-			return FuckGlideDrawable;
+			if(debugging) CMN.Log("PageAsyncLoaderBean loaded:: this="+Integer.toHexString(CMN.id(this)));
+			return EmptyGlideDrawable;
 		}
 		@Override
 		public boolean equals(@Nullable Object o) {
@@ -365,14 +368,14 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	private void PrepareNxtPage(SimpleCursorPage<T> page, boolean dir) {
 		if(closed) return;
 		//CMN.Log("PrepareNxtPage::???", dir, mGrowingPage);
-		if (!glide_initialized || recyclerView!=null && (mGrowingPage!=page || (mGrowingPageDir|(dir?2:1))==0)) {
+		if (!glide_initialized || recyclerView!=null && (mGrowingPage!=page || (mGrowingPageDir&(dir?2:1))==0)) {
 			//CMN.Log("PrepareNxtPage::", dir, page);
 			if (glide!=null) {
 				mGrowingPage = page;
 				//CMN.Log("PrepareNxtPage::glide loading...", dir, page);
 				init_glide();
 				glide.load(new AppIconCover(new PageAsyncLoaderBean(number_of_rows_detected, null, dir)))
-						.into(pageAsyncLoader);
+						.into(getPageAsyncLoader(dir));
 			} else {
 				mGrowingPage = page;
 				Runnable run = dir ? mGrowRunnableDown : mGrowRunnableUp;
@@ -479,8 +482,21 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	}
 	
 	public SimpleCursorPage<T> GrowPage(boolean dir) {
-		SimpleCursorPage<T> lastPage = dir?pages.get(pages.size()-1):pages.get(0);
-		//CMN.Log("GrowPage::", dir, lastPage);
+		SimpleCursorPage<T> lastPage = pages.size()==0?null:dir?pages.get(pages.size()-1):pages.get(0);
+		if(lastPage==null) {
+			lastPage = new SimpleCursorPage<>();
+			lastPage.st_id = lastPage.ed_id = -1;
+			if (DESC) {
+				lastPage.st_fd = Long.MIN_VALUE;
+				lastPage.ed_fd = Long.MAX_VALUE;
+			} else {
+				lastPage.st_fd = Long.MAX_VALUE;
+				lastPage.ed_fd = Long.MIN_VALUE;
+			}
+			lastPage.pos = -1;
+			lastPage.end = -1;
+		}
+		if(debugging) CMN.Log("GrowPage::", dir, lastPage);
 		boolean popData = true;
 		SimpleCursorPage<T> ret=null;
 		String[] _whereArgs = this.whereArgs;
@@ -489,10 +505,12 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		if (whereArgs.length>1) {
 			System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
 		}
+		if(debugging) CMN.Log("sql::", dir?sql:sql_reverse);
 		try (Cursor cursor = db.rawQuery(dir?sql:sql_reverse, whereArgs)){
 			int len = cursor.getCount();
+			if(debugging) CMN.Log("sql::", len);
 			if (len>0) {
-				ArrayList<T> rows = new ArrayList<>(pageSz);
+				ArrayList<T> rows = null;
 				long lastEndId = dir?lastPage.ed_id:lastPage.st_id;
 				SimpleCursorPage<T> page = new SimpleCursorPage<>();
 				boolean lastRowFound = false;
@@ -507,7 +525,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 							lastEndId=-1;
 							lastRowFound = true;
 							if (page.number_of_row>0) {
-								rows.clear();
+								if(rows!=null) rows.clear();
 								page.number_of_row=0;
 							}
 							continue;
@@ -523,15 +541,21 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 						}
 					}
 					if (popData) {
+						if (rows==null) {
+							rows = new ArrayList<>(pageSz);
+						}
 						T row = mRowConstructor.newInstance(0);
 						row.ReadCursor(cursor, id, sort_number);
 						rows.add(row);
 					}
 					page.number_of_row++;
 				}
-				if ((!lastRowFound || id==lastEndId) && lastEndId!=-1) {
+				if ((!lastRowFound || id==lastEndId) && lastEndId!=-1 || lastRowFound && page.number_of_row==0 && cursor.getCount()==pageSz) {
 					if (len==1) return null;
 					throw new IllegalStateException("pageSz too small!"+lastRowFound+" "+rows.size()+" "+dir);
+				}
+				if (page.number_of_row == 0) {
+					return null;
 				}
 				if (popData) {
 					page.rows = rows.toArray(mRowArrConstructor.newInstance(rows.size()));
@@ -592,7 +616,8 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				}
 			}
 			while(true) {
-				//CMN.Log("PreparePageAt::");
+				if(debugging) CMN.Log("PreparePageAt::sql="+sql);
+				if(debugging) CMN.Log("PreparePageAt::number_of_rows_detected="+number_of_rows_detected, "pageSz="+pages.size(), "ed_fd::", lastPage.ed_fd);
 				long st_pos = number_of_rows_detected;
 				boolean popData = st_pos + pageSz > position;
 				popData = true;
@@ -602,6 +627,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				if (whereArgs.length>1) {
 					System.arraycopy(_whereArgs, 0, whereArgs, 1, whereArgs.length - 1);
 				}
+				if(debugging) CMN.Log("PreparePageAt::whereArgs=", whereArgs);
 				try (Cursor cursor = db.rawQuery(popData?sql:sql_fst, whereArgs)){
 					int len = cursor.getCount();
 					if (len>0) {
@@ -612,6 +638,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 						long id = -1;
 						long sort_number = 0;
 						while (cursor.moveToNext()) {
+							if(debugging) CMN.Log("PreparePageAt::cursor.moveToNext()", (cursor.getPosition()+1)+"/"+len, "lastEndId="+lastEndId, lastRowFound);
 							id = cursor.getLong(0);
 							sort_number = cursor.getLong(1);
 							if (lastEndId!=-1) {
@@ -636,7 +663,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 							}
 							page.number_of_row++;
 						}
-						if ((!lastRowFound || id==lastEndId) && lastEndId!=-1) {
+						if ((!lastRowFound || id==lastEndId) && lastEndId!=-1 || lastRowFound && page.number_of_row==0 && cursor.getCount()==pageSz) {
 							//todo dont throw!!!
 							throw new IllegalStateException("pageSz too small!");
 						}
@@ -671,4 +698,37 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		}
 	}
 	
+	@Override
+	public void recheckBoundary() {
+		mGrowingPageDir = 0;
+	}
+	
+	@Override
+	public void recheckBoundaryAt(int position, boolean start) {
+		try {
+			if(debugging) CMN.Log("recheckBoundaryAt::1::", position, start);
+			if (pages.size() == 0) {
+				PrepareNxtPage(null, true);
+			} else {
+				int idx = getPageAt(position);
+				if(start && idx==0)
+					getReaderAt(0);
+				if(!start && idx==pages.size()-1)
+					getReaderAt(getCount()-1);
+			}
+		} catch (Exception e) {
+			CMN.Log(e);
+		}
+	}
+	
+	public ImageView getPageAsyncLoader(boolean dir) {
+		return pageAsyncLoader;
+//		if (dir) {
+//			return pageAsyncLoader;
+//		}
+//		if(pageAsyncLoader.getTag()==null) {
+//			pageAsyncLoader.setTag(new ImageView(pageAsyncLoader.getContext()));
+//		}
+//		return (ImageView) pageAsyncLoader.getTag();
+	}
 }
