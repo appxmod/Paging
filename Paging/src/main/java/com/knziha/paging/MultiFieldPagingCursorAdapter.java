@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.drawable.Drawable;
 import android.util.Pair;
+import android.view.View;
 import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
@@ -39,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> implements PagingAdapterInterface<T> {
 	private RecyclerView recyclerView;
 	public static boolean simulateSlowIO;
+	public long id;
 	
 	ArrayList<MultiFieldSortCursorPage<T>> pages =  new ArrayList<>(1024);
 	Queue<Pair<Integer, MultiFieldSortCursorPage<T>>> insertQueue = new ConcurrentLinkedQueue<>();
@@ -70,6 +72,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 	final static boolean debugging = false;
 	
 	boolean closed;
+	private boolean topReached;
 	
 	public MultiFieldPagingCursorAdapter(SQLiteDatabase db, ConstructorInterface<T> mRowConstructor
 			, ConstructorInterface<T[]> mRowArrConstructor) {
@@ -100,7 +103,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 	int pageDataSz = 100;
 	
 	@Override
-	public T getReaderAt(int position) {
+	public T getReaderAt(int position, boolean triggerPaging) {
 		T ret;
 		try {
 			int idx = getPageAt(position);
@@ -113,17 +116,17 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 				//CMN.Log("--- page0="+pages.get(0));
 				CMN.Log("--- "+offsetedPos, page.rows[(int) (offsetedPos-page.pos)]);
 			}
-			if(glide==null || glide_initialized) {
+			if(triggerPaging && (glide==null || glide_initialized)) {
 				boolean b1=idx==pages.size()-1 && offsetedPos >=page.end-page.number_of_row/2;
 				boolean b2=idx==0 && offsetedPos<=page.pos+page.number_of_row/2;
 				//if (debugging) CMN.Log("getReaderAt::", b1, b2, idx, offsetedPos);
 				// b1 是向下扫
-//			if (b1 ^ b2) {
-//				PrepareNxtPage(page, b1);
-//			}
-//			else if (b1 && b2) {
-//				PrepareNxtPage(page, false);
-//			}
+//				if (b1 ^ b2) {
+//					PrepareNxtPage(page, b1);
+//				}
+//				else if (b1 && b2) {
+//					PrepareNxtPage(page, false);
+//				}
 				if ((b1 || b2) && mGrowingPage != page) {
 					mGrowingPageDir = 0;
 				}
@@ -310,6 +313,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 		pages.clear();
 		number_of_rows_detected = 0;
 		pageSz = page_size;
+		topReached = resume_to_sort_numbers==null;
 		if (glide!=null) {
 			glide_initialized = false;
 			glide.load(new AppIconCover(() -> {
@@ -386,7 +390,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 		}
 	}
 	
-	Runnable mGrowRunnableDown = new Runnable() {
+	protected Runnable mGrowRunnableDown = new Runnable() {
 		@Override
 		public void run() {
 			if(closed) return;
@@ -398,7 +402,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 		}
 	};
 	
-	Runnable mGrowRunnableUp = new Runnable() {
+	protected Runnable mGrowRunnableUp = new Runnable() {
 		@Override
 		public void run() {
 			if(closed) return;
@@ -409,6 +413,11 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 			}
 		}
 	};
+	
+	@Override
+	public void growUp(View recyclerView) {
+		recyclerView.post(mGrowRunnableUp);
+	}
 	
 	class PageAsyncLoaderBean implements AppLoadableBean {
 		final int st;
@@ -478,6 +487,9 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 				@Override
 				public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
 					CMN.Log("onLoadFailed::", e);
+					if(debugging) {
+						e.logRootCauses("fatal poison");
+					}
 					mGrowingPage = null;
 					return false;
 				}
@@ -504,6 +516,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 					while((page = updateQueue.poll())!=null) {
 						ada.notifyItemRangeChanged((int)(page.pos+basePosOffset), (int) (page.end+basePosOffset));
 					}
+					recyclerView.invalidateItemDecorations();
 					return true;
 				}
 			});
@@ -536,8 +549,8 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 	
 	public void ReLoadPage(MultiFieldSortCursorPage<T> page) {
 		String[] _whereArgs = this.whereArgs;
-		String[] whereArgs = new String[1+_whereArgs.length];
 		int _1 = sortFields.length;
+		String[] whereArgs = new String[_1+_whereArgs.length];
 		for (int i = 0; i < _1; i++) {
 			whereArgs[i] = page.st_fds[i]+"";
 		}
@@ -556,7 +569,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 					id = cursor.getLong(0);
 					sort_numbers = new_sorts(cursor);
 					T row = mRowConstructor.newInstance(0);
-					row.ReadCursor(cursor, id, sort_numbers);
+					row.ReadCursor(this, cursor, id, sort_numbers);
 					rows.add(row);
 					cc++;
 				}
@@ -582,7 +595,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 				lastPage.st_fds = new_sorts(Long.MAX_VALUE);
 				lastPage.ed_fds = new_sorts(Long.MIN_VALUE);
 			}
-			lastPage.pos = -1;
+			lastPage.pos = 0;
 			lastPage.end = -1;
 		}
 		if(debugging) CMN.Log("GrowPage::", dir, lastPage);
@@ -637,17 +650,27 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 							rows = new ArrayList<>(pageSz);
 						}
 						T row = mRowConstructor.newInstance(0);
-						row.ReadCursor(cursor, id, sort_numbers);
+						row.ReadCursor(this, cursor, id, sort_numbers);
 						rows.add(row);
 					}
 					page.number_of_row++;
 				}
 				if ((!lastRowFound || id==lastEndId) && lastEndId!=-1 || lastRowFound && page.number_of_row==0 && cursor.getCount()==pageSz) {
-					if (len==1) return null;
+					if (len==1) {
+						 if(!dir) {
+							 topReached = true;
+							 CMN.Log("topReached!!!");
+						 }
+						return null;
+					}
 					//CMN.Log(dir, dir?sql:sql_reverse, whereArgs);
 					throw new IllegalStateException("pageSz too small!"+lastRowFound+" "+rows.size()+" "+dir);
 				}
 				if (page.number_of_row == 0) {
+					if(!dir) {
+						topReached = true;
+						CMN.Log("topReached!!!");
+					}
 					return null;
 				}
 				if (rows != null) {
@@ -755,7 +778,7 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 							}
 							if (popData) {
 								T row = mRowConstructor.newInstance(0);
-								row.ReadCursor(cursor, id, sort_numbers);
+								row.ReadCursor(this, cursor, id, sort_numbers);
 								rows.add(row);
 							}
 							page.number_of_row++;
@@ -823,9 +846,9 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 			} else {
 				int idx = getPageAt(position);
 				if(start && idx==0)
-					getReaderAt(0);
+					getReaderAt(0, true);
 				if(!start && idx==pages.size()-1)
-					getReaderAt(getCount()-1);
+					getReaderAt(getCount()-1, true);
 			}
 		} catch (Exception e) {
 			CMN.Log(e);
@@ -841,5 +864,20 @@ public class MultiFieldPagingCursorAdapter<T extends CursorReaderMultiSortNum> i
 //			pageAsyncLoader.setTag(new ImageView(pageAsyncLoader.getContext()));
 //		}
 //		return (ImageView) pageAsyncLoader.getTag();
+	}
+	
+	@Override
+	public boolean getTopReached() {
+		return topReached;
+	}
+	
+	@Override
+	public int getPageIdx(int position) {
+		try {
+			return pages.size() - getPageAt(position);
+		} catch (Exception e) {
+			CMN.Log(e);
+		}
+		return -1;
 	}
 }

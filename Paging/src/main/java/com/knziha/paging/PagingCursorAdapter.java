@@ -7,6 +7,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.drawable.Drawable;
 import android.util.Pair;
+import android.view.View;
 import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
@@ -39,6 +40,7 @@ import static com.knziha.logger.CMN.EmptyGlideDrawable;
 public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapterInterface<T> {
 	private RecyclerView recyclerView;
 	public static boolean simulateSlowIO;
+	public long id;
 	
 	ArrayList<SimpleCursorPage<T>> pages =  new ArrayList<>(1024);
 	Queue<Pair<Integer, SimpleCursorPage<T>>> insertQueue = new ConcurrentLinkedQueue<>();
@@ -70,6 +72,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	final static boolean debugging = false;
 	
 	boolean closed;
+	private boolean topReached;
 	
 	public PagingCursorAdapter(SQLiteDatabase db, ConstructorInterface<T> mRowConstructor
 			, ConstructorInterface<T[]> mRowArrConstructor) {
@@ -100,7 +103,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	int pageDataSz = 100;
 	
 	@Override
-	public T getReaderAt(int position) {
+	public T getReaderAt(int position, boolean triggerPaging) {
 		int idx = getPageAt(position);
 		SimpleCursorPage<T> page = pages.get(idx);
 		int offsetedPos = (int) (position-basePosOffset);
@@ -226,6 +229,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		pages.clear();
 		number_of_rows_detected = 0;
 		pageSz = page_size;
+		topReached = true; // xx
 		if (glide!=null) {
 			glide_initialized = false;
 			glide.load(new AppIconCover(() -> {
@@ -285,6 +289,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 	public void mGrowRunnableRun(final boolean dir) {
 		if(closed) return;
 		final int st = number_of_rows_detected;
+		final long stoff = basePosOffset;
 		final SimpleCursorPage<T> pg = GrowPage(dir);
 		if (pg!=null) {
 			number_of_rows_detected += pg.number_of_row;
@@ -294,14 +299,17 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			} else {
 				pages.add(pg);
 			}
-			//if (!dir) CMN.Log("reverse GrowPage::", number_of_rows_detected - st);
+			if (debugging) {
+				if (!dir) CMN.Log("reverse GrowPage::", st, number_of_rows_detected - st, "pg.number_of_row="+pg.number_of_row, "pg.pos="+pg.pos);
+				CMN.Log("basePosOffset=", stoff+"=>"+basePosOffset);
+			}
 			//if (number_of_rows_detected!=st) {
 			//	recyclerView.getAdapter().notifyItemRangeInserted(dir?st+1:0, number_of_rows_detected - st);
 			//}
 		}
 	}
 	
-	Runnable mGrowRunnableDown = new Runnable() {
+	protected Runnable mGrowRunnableDown = new Runnable() {
 		@Override
 		public void run() {
 			if(closed) return;
@@ -313,7 +321,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 		}
 	};
 	
-	Runnable mGrowRunnableUp = new Runnable() {
+	protected Runnable mGrowRunnableUp = new Runnable() {
 		@Override
 		public void run() {
 			if(closed) return;
@@ -324,6 +332,11 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			}
 		}
 	};
+	
+	@Override
+	public void growUp(View recyclerView) {
+		recyclerView.post(mGrowRunnableUp);
+	}
 	
 	class PageAsyncLoaderBean implements AppLoadableBean {
 		final int st;
@@ -467,7 +480,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 					id = cursor.getLong(0);
 					sort_number = cursor.getLong(1);
 					T row = mRowConstructor.newInstance(0);
-					row.ReadCursor(cursor, id, sort_number);
+					row.ReadCursor(this, cursor, id, sort_number);
 					rows.add(row);
 					cc++;
 				}
@@ -493,7 +506,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 				lastPage.st_fd = Long.MAX_VALUE;
 				lastPage.ed_fd = Long.MIN_VALUE;
 			}
-			lastPage.pos = -1;
+			lastPage.pos = 0;
 			lastPage.end = -1;
 		}
 		if(debugging) CMN.Log("GrowPage::", dir, lastPage);
@@ -545,7 +558,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 							rows = new ArrayList<>(pageSz);
 						}
 						T row = mRowConstructor.newInstance(0);
-						row.ReadCursor(cursor, id, sort_number);
+						row.ReadCursor(this, cursor, id, sort_number);
 						rows.add(row);
 					}
 					page.number_of_row++;
@@ -658,7 +671,7 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 							}
 							if (popData) {
 								T row = mRowConstructor.newInstance(0);
-								row.ReadCursor(cursor, id, sort_number);
+								row.ReadCursor(this, cursor, id, sort_number);
 								rows.add(row);
 							}
 							page.number_of_row++;
@@ -712,9 +725,9 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 			} else {
 				int idx = getPageAt(position);
 				if(start && idx==0)
-					getReaderAt(0);
+					getReaderAt(0, true);
 				if(!start && idx==pages.size()-1)
-					getReaderAt(getCount()-1);
+					getReaderAt(getCount()-1, true);
 			}
 		} catch (Exception e) {
 			CMN.Log(e);
@@ -730,5 +743,15 @@ public class PagingCursorAdapter<T extends CursorReader> implements PagingAdapte
 //			pageAsyncLoader.setTag(new ImageView(pageAsyncLoader.getContext()));
 //		}
 //		return (ImageView) pageAsyncLoader.getTag();
+	}
+	
+	@Override
+	public boolean getTopReached() {
+		return topReached;
+	}
+	
+	@Override
+	public int getPageIdx(int position) {
+		return 0;
 	}
 }

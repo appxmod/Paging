@@ -1,6 +1,7 @@
 package com.knziha.paging;
 
 import android.database.Cursor;
+import android.view.View;
 
 public class CursorAdapter<T extends CursorReader> implements PagingAdapterInterface<T> {
 	final Cursor cursor;
@@ -17,15 +18,20 @@ public class CursorAdapter<T extends CursorReader> implements PagingAdapterInter
 	}
 	
 	@Override
-	public T getReaderAt(int position) {
+	public T getReaderAt(int position, boolean triggerPaging) {
 		cursor.moveToPosition(position);
-		reader.ReadCursor(cursor, -1, 0);
+		reader.ReadCursor(this, cursor, -1, 0);
 		return reader;
 	}
 	
 	@Override
 	public void close() {
 		cursor.close();
+	}
+	
+	@Override
+	public void growUp(View recyclerView) {
+	
 	}
 	
 	@Override
@@ -36,5 +42,15 @@ public class CursorAdapter<T extends CursorReader> implements PagingAdapterInter
 	@Override
 	public void recheckBoundaryAt(int i, boolean start) {
 	
+	}
+	
+	@Override
+	public boolean getTopReached() {
+		return true;
+	}
+	
+	@Override
+	public int getPageIdx(int position) {
+		return 0;
 	}
 }
