@@ -38,14 +38,14 @@ dependencies {
 
 
 
-afterEvaluate {
-    gradle.buildFinished{ BuildResult buildResult ->
-        if (buildResult.failure) {
-            ['powershell', """(New-Object Media.SoundPlayer "D:\\Downloads\\music\\error.wav").PlaySync();"""].execute()
-            println("failed doing task")
-        } else {
-            ['powershell', """(New-Object Media.SoundPlayer "D:\\Downloads\\music\\muse_SchivoNo.2.wav").PlaySync();"""].execute()
-            println("build finished")
-        }
-    }
-}
+//afterEvaluate {
+//    gradle.buildFinished{ BuildResult buildResult ->
+//        if (buildResult.failure) {
+//            ['powershell', """(New-Object Media.SoundPlayer "D:\\Downloads\\music\\error.wav").PlaySync();"""].execute()
+//            println("failed doing task")
+//        } else {
+//            ['powershell', """(New-Object Media.SoundPlayer "D:\\Downloads\\music\\muse_SchivoNo.2.wav").PlaySync();"""].execute()
+//            println("build finished")
+//        }
+//    }
+//}
