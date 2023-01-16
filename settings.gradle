@@ -7,7 +7,5 @@
 //        maven { url "https://jitpack.io" }
 //    }
 //}
-
-rootProject.name = "Paging"
 include ':Paging'
 include ':Logger'

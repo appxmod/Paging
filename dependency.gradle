@@ -15,10 +15,6 @@
 
 dependencies {
 
-
-
-
-
     api('com.github.appxmod.GlideModule:GlideModule:latest.release')
     api('com.github.appxmod.GlideModule:GifDecoder:latest.release')
     api('com.github.appxmod.GlideModule:DiskLruCache:latest.release')
@@ -30,10 +26,7 @@ dependencies {
     implementation('com.github.appxmod.GlideModule:Annotation:latest.release')
 
     //compileOnly("com.google.auto.service:auto-service:1.0-rc6")
-    annotationProcessor ("com.google.auto.service:auto-service:1.0-rc6") 
-
-
-
+    annotationProcessor ("com.google.auto.service:auto-service:1.0-rc6")
 }
 
 
