@@ -14,16 +14,15 @@
 
 
 dependencies {
-
-    api('com.github.appxmod.GlideModule:GlideModule:latest.release')
-    api('com.github.appxmod.GlideModule:GifDecoder:latest.release')
-    api('com.github.appxmod.GlideModule:DiskLruCache:latest.release')
+    api libs_glide
+    api libs_glide_gifdec
+    api libs_glide_lru
     api libs_pref
 
-    compileOnly ('com.github.appxmod.GlideModule:Compiler:latest.release')
-    annotationProcessor ('com.github.appxmod.GlideModule:Compiler:latest.release')
+    compileOnly (libs_glide_compl)
+    annotationProcessor (libs_glide_compl)
 
-    implementation('com.github.appxmod.GlideModule:Annotation:latest.release')
+    implementation(libs_glide_ann)
 
     //compileOnly("com.google.auto.service:auto-service:1.0-rc6")
     annotationProcessor ("com.google.auto.service:auto-service:1.0-rc6")
